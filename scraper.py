@@ -18,7 +18,7 @@ COLUMN_NAME_MAP = {
     "sæti": "rank",                                # Icelandic for rank
     "rásnr.": "bib", "rásnr": "bib", "bib nr": "bib",
     "nafn": "name",
-    "f.ár": "year", "fár": "year", "fæðingarár": "year",
+    "f.ár": "year", "fár": "year", "fæðingarár": "year", "yob": "year",
     "félag": "club", "félagsskapur": "club",
     "þjóðerni": "nationality",
     "lokatími": "time", "tími": "time",

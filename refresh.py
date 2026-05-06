@@ -30,16 +30,24 @@ def apply_distance_overrides():
 
 
 def find_problem_races():
-    """Races with no year, no distance, or no runners."""
+    """Races with no year, no distance, no runners,
+    or runners-but-no-birth-years (a parser column-mapping miss)."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         SELECT r.id, r.url, r.name, r.year, r.distance_km,
-               (SELECT COUNT(*) FROM results WHERE race_id = r.id) AS runners
+               (SELECT COUNT(*) FROM results WHERE race_id = r.id) AS runners,
+               (SELECT COUNT(*) FROM results
+                 WHERE race_id = r.id AND birth_year IS NOT NULL) AS with_bday
           FROM races r
          WHERE r.year IS NULL
             OR r.distance_km IS NULL
             OR (SELECT COUNT(*) FROM results WHERE race_id = r.id) = 0
+            OR (
+                  (SELECT COUNT(*) FROM results WHERE race_id = r.id) >= 3
+                  AND (SELECT COUNT(*) FROM results
+                        WHERE race_id = r.id AND birth_year IS NOT NULL) = 0
+               )
          ORDER BY r.id
     """)
     rows = cur.fetchall()
@@ -57,13 +65,11 @@ def delete_race(race_id):
 
 
 def main():
-    init_db()  # Runs schema migration if needed.
+    init_db()
 
-    # 1) Cheap fixes first: hard-coded distance overrides.
     updated = apply_distance_overrides()
     print(f"Distance overrides applied: {updated} race(s) updated.\n")
 
-    # 2) Crawl event pages to discover dates, backfill them onto existing rows.
     print("=" * 60)
     print("Discovering race dates from event pages...")
     print("=" * 60 + "\n")
@@ -71,7 +77,6 @@ def main():
     backfilled = update_existing_dates(discovered)
     print(f"\nBackfilled race_date on {backfilled} existing races.\n")
 
-    # 3) Find and re-scrape rows with structural problems.
     problems = find_problem_races()
     print(f"Found {len(problems)} problem races to re-scrape.\n")
 
@@ -80,7 +85,7 @@ def main():
         return
 
     fixed = 0
-    for race_id, url, name, year, distance, runners in problems:
+    for race_id, url, name, year, distance, runners, with_bday in problems:
         reasons = []
         if year is None:
             reasons.append("no year")
@@ -88,6 +93,8 @@ def main():
             reasons.append("no distance")
         if runners == 0:
             reasons.append("no runners")
+        elif with_bday == 0:
+            reasons.append("no birth years")
         print(f"  [{race_id}] {name} ({', '.join(reasons)})")
 
         delete_race(race_id)
