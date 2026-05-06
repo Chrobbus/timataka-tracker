@@ -7,7 +7,7 @@ import streamlit as st
 
 DB_PATH = "race_results.db"
 
-st.set_page_config(page_title="Tímataka Tracker", page_icon="🏃", layout="wide")
+st.set_page_config(page_title="Tímataka Race Tracker", page_icon="🏃", layout="wide")
 st.title("Tímataka Race Tracker 🏃")
 st.caption("Track your running progress across races on timataka.net")
 
