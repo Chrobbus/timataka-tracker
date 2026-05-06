@@ -7,7 +7,7 @@ import streamlit as st
 
 DB_PATH = "race_results.db"
 
-st.set_page_config(page_title="Tímataka Race Tracker", page_icon="🏃", layout="wide")
+st.set_page_config(page_title="Tímataka Tracker", page_icon="🏃", layout="wide")
 st.title("Tímataka Race Tracker 🏃")
 st.caption("Track your running progress across races on timataka.net")
 
@@ -33,8 +33,6 @@ def load_results():
     """, conn)
     conn.close()
 
-    # Parse race_date as a real datetime; fall back to mid-year for rows
-    # that don't have a precise date so the chart still places them.
     df["race_date_parsed"] = pd.to_datetime(df["race_date"], errors="coerce")
     fallback_mask = df["race_date_parsed"].isna() & df["race_year"].notna()
     df.loc[fallback_mask, "race_date_parsed"] = pd.to_datetime(
@@ -74,22 +72,55 @@ if matches.empty:
     st.error(f"No runners found matching '{search}'.")
     st.stop()
 
-unique_names = sorted(matches["runner_name"].unique())
-if len(unique_names) > 1:
-    selected = st.selectbox(
-        f"Found {len(unique_names)} matching runners — pick one:",
-        unique_names,
+# Group by (name + birth_year) so two runners with the same name but
+# different ages stay separate. Birth year always appears on timataka results.
+runner_groups = (
+    matches.groupby(["runner_name", "birth_year"], dropna=False)
+    .size()
+    .reset_index(name="race_count")
+    .sort_values(["runner_name", "birth_year"])
+)
+
+
+def runner_label(name, birth_year, count):
+    if pd.notna(birth_year):
+        by = f"born {int(birth_year)}"
+    else:
+        by = "birth year unknown"
+    races_word = "race" if count == 1 else "races"
+    return f"{name} ({by}, {count} {races_word})"
+
+
+runner_groups["label"] = runner_groups.apply(
+    lambda r: runner_label(r["runner_name"], r["birth_year"], r["race_count"]),
+    axis=1,
+)
+
+if len(runner_groups) > 1:
+    selected_label = st.selectbox(
+        f"Found {len(runner_groups)} matching runners — pick one:",
+        runner_groups["label"].tolist(),
     )
+    selected_row = runner_groups[runner_groups["label"] == selected_label].iloc[0]
 else:
-    selected = unique_names[0]
+    selected_row = runner_groups.iloc[0]
 
-runner = df[df["runner_name"] == selected].sort_values(["race_date_parsed", "race_name"])
+selected_name = selected_row["runner_name"]
+selected_birth_year = selected_row["birth_year"]
 
-st.header(selected)
+# Match on BOTH name and birth year — never mix two different people.
+if pd.isna(selected_birth_year):
+    runner = df[(df["runner_name"] == selected_name) & df["birth_year"].isna()]
+else:
+    runner = df[
+        (df["runner_name"] == selected_name)
+        & (df["birth_year"] == selected_birth_year)
+    ]
+runner = runner.sort_values(["race_date_parsed", "race_name"])
 
-birth = runner["birth_year"].mode()
-if not birth.empty and pd.notna(birth.iloc[0]):
-    st.caption(f"Born {int(birth.iloc[0])}")
+st.header(selected_name)
+if pd.notna(selected_birth_year):
+    st.caption(f"Born {int(selected_birth_year)}")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Total races", len(runner))
