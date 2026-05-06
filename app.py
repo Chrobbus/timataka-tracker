@@ -1,5 +1,6 @@
 """Streamlit dashboard for the Tímataka race tracker."""
 
+import os
 import sqlite3
 import pandas as pd
 import altair as alt
@@ -12,8 +13,14 @@ st.title("Tímataka Race Tracker 🏃")
 st.caption("Track your running progress across races on timataka.net")
 
 
+def _db_mtime():
+    """Return the database file's modification time. Used as a cache key
+    so the cache invalidates whenever the .db file is updated."""
+    return os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else 0
+
+
 @st.cache_data
-def load_results():
+def load_results(db_mtime):
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query("""
         SELECT
@@ -50,7 +57,7 @@ def format_time(seconds):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-df = load_results()
+df = load_results(_db_mtime())
 
 if df.empty:
     st.warning("No data yet. Run `python scraper.py` to populate the database.")
