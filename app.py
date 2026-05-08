@@ -11,8 +11,12 @@ DB_PATH = "race_results.db"
 
 st.set_page_config(page_title="Tímataka Tracker", page_icon="🏃", layout="wide")
 st.title("Tímataka Race Tracker 🏃")
-st.caption("Track your running progress across races on timataka.net")
-
+st.markdown(
+    "Track your running progress across races timed by "
+    "**[timataka.net](https://timataka.net/)**. "
+    "If you'd like your results removed, email "
+    "[danielingi89@gmail.com](mailto:danielingi89@gmail.com)."
+)
 
 # ─── DATA LOADING ────────────────────────────────────────────────────────────
 
@@ -304,15 +308,17 @@ st.caption(
 
 with st.expander("ℹ️ About the data"):
     st.markdown(
-        "Race results here are scraped from **timataka.net**, the timing "
-        "service used by most Icelandic running events. **Only races and "
-        "times available there appear in this dashboard** — if a specific "
-        "race or year is missing or broken upstream (e.g. Gamlárshlaup ÍR 2025 "
-        "is currently unavailable on timataka), it won't be here either. "
-        "Results are also limited to races that publish a 'Heildarúrslit / "
-        "Overall' page; some events only publish gender/age splits."
+        "All race results are sourced from **[timataka.net](https://timataka.net/)**, "
+        "the timing service used by most Icelandic running events. "
+        "Only races available there appear in this dashboard — if a specific "
+        "race or year is missing upstream, or a page is temporarily broken on "
+        "timataka's side, it won't be here either. "
+        "Results are limited to events that publish a *Heildarúrslit / Overall* "
+        "page; some races only publish gender or age-split categories.\n\n"
+        "**Data removal:** Email "
+        "[danielingi89@gmail.com](mailto:danielingi89@gmail.com) "
+        "and I'll remove your name from this site within a few days."
     )
-
 profile_tab, compare_tab = st.tabs(["🏃 Runner profile", "⚖️ Compare two runners"])
 
 with profile_tab:
