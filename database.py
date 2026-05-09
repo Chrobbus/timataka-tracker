@@ -100,7 +100,7 @@ def save_race(metadata, runners):
     for r in runners:
         rank = r.get("rank", "").strip()
         birth_year = r.get("year", "").strip()
-        chiptime = r.get("chiptime", "").strip() or None
+        chiptime = r.get("chiptime", "").strip() or r.get("time", "").strip() or None
 
         cur.execute("""
             INSERT INTO results
