@@ -31,14 +31,17 @@ def apply_distance_overrides():
 
 def find_problem_races():
     """Races with no year, no distance, no runners,
-    or runners-but-no-birth-years (a parser column-mapping miss)."""
+    runners-but-no-birth-years (column-mapping miss),
+    or runners-but-no-chiptimes (gun-time-only event scraped before fallback)."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         SELECT r.id, r.url, r.name, r.year, r.distance_km,
                (SELECT COUNT(*) FROM results WHERE race_id = r.id) AS runners,
                (SELECT COUNT(*) FROM results
-                 WHERE race_id = r.id AND birth_year IS NOT NULL) AS with_bday
+                 WHERE race_id = r.id AND birth_year IS NOT NULL) AS with_bday,
+               (SELECT COUNT(*) FROM results
+                 WHERE race_id = r.id AND chiptime_seconds IS NOT NULL) AS with_chiptime
           FROM races r
          WHERE r.year IS NULL
             OR r.distance_km IS NULL
@@ -47,6 +50,11 @@ def find_problem_races():
                   (SELECT COUNT(*) FROM results WHERE race_id = r.id) >= 3
                   AND (SELECT COUNT(*) FROM results
                         WHERE race_id = r.id AND birth_year IS NOT NULL) = 0
+               )
+            OR (
+                  (SELECT COUNT(*) FROM results WHERE race_id = r.id) >= 3
+                  AND (SELECT COUNT(*) FROM results
+                        WHERE race_id = r.id AND chiptime_seconds IS NOT NULL) = 0
                )
          ORDER BY r.id
     """)
@@ -85,7 +93,7 @@ def main():
         return
 
     fixed = 0
-    for race_id, url, name, year, distance, runners, with_bday in problems:
+    for race_id, url, name, year, distance, runners, with_bday, with_chiptime in problems:
         reasons = []
         if year is None:
             reasons.append("no year")
@@ -93,8 +101,10 @@ def main():
             reasons.append("no distance")
         if runners == 0:
             reasons.append("no runners")
-        elif with_bday == 0:
+        if runners > 0 and with_bday == 0:
             reasons.append("no birth years")
+        if runners > 0 and with_chiptime == 0:
+            reasons.append("no chiptimes")
         print(f"  [{race_id}] {name} ({', '.join(reasons)})")
 
         delete_race(race_id)
