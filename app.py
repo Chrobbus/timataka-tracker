@@ -13,9 +13,7 @@ st.set_page_config(page_title="Tímataka Tracker", page_icon="🏃", layout="wid
 st.title("Tímataka Race Tracker 🏃")
 st.markdown(
     "Track your running progress across races timed by "
-    "**[timataka.net](https://timataka.net/)**. "
-    "If you'd like your results removed, email "
-    "[danielingi89@gmail.com](mailto:danielingi89@gmail.com)."
+    "**[timataka.net](https://timataka.net/)**."
 )
 
 # ─── DATA LOADING ────────────────────────────────────────────────────────────
@@ -314,10 +312,7 @@ with st.expander("ℹ️ About the data"):
         "race or year is missing upstream, or a page is temporarily broken on "
         "timataka's side, it won't be here either. "
         "Results are limited to events that publish a *Heildarúrslit / Overall* "
-        "page; some races only publish gender or age-split categories.\n\n"
-        "**Data removal:** Email "
-        "[danielingi89@gmail.com](mailto:danielingi89@gmail.com) "
-        "and I'll remove your name from this site within a few days."
+        "page; some races only publish gender or age-split categories."
     )
 profile_tab, compare_tab = st.tabs(["🏃 Runner profile", "⚖️ Compare two runners"])
 
