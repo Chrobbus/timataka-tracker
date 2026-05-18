@@ -7,19 +7,35 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from translations import t
+
 DB_PATH = "race_results.db"
 
-st.set_page_config(page_title="Tímataka Tracker", page_icon="🏃", layout="wide")
-st.title("Tímataka Race Tracker 🏃")
-st.markdown(
-    "Track your running progress across races timed by "
-    "**[timataka.net](https://timataka.net/)**."
+st.set_page_config(
+    page_title="Tímataka Tracker", page_icon="🏃", layout="wide"
 )
+
+# ─── HEADER + LANGUAGE SELECTOR ──────────────────────────────────────────────
+
+header_col, lang_col = st.columns([5, 1])
+with header_col:
+    st.title(t("app_title"))
+with lang_col:
+    st.selectbox(
+        "Tungumál / Language",
+        options=["is", "en"],
+        format_func=lambda x: "🇮🇸 Íslenska" if x == "is" else "🇬🇧 English",
+        index=0,
+        key="lang",
+        label_visibility="collapsed",
+    )
+
+st.markdown(t("tagline_md"))
+
 
 # ─── DATA LOADING ────────────────────────────────────────────────────────────
 
 def _db_mtime():
-    """Used as a cache key so caches invalidate when the .db file is updated."""
     return os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else 0
 
 
@@ -64,7 +80,6 @@ def format_time(seconds):
 
 
 def format_pace(seconds, distance_km):
-    """Convert a finish time + distance into a min/km pace string."""
     if pd.isna(seconds) or pd.isna(distance_km) or distance_km == 0:
         return "—"
     pace_seconds = seconds / distance_km
@@ -75,29 +90,27 @@ def format_pace(seconds, distance_km):
 
 def runner_display_label(name, birth_year, count):
     if pd.notna(birth_year):
-        by = f"born {int(birth_year)}"
+        by = t("born_short", year=int(birth_year))
     else:
-        by = "birth year unknown"
-    races_word = "race" if count == 1 else "races"
-    return f"{name} ({by}, {count} {races_word})"
+        by = t("born_unknown")
+    unit = t("race_unit_singular" if count == 1 else "race_unit_plural")
+    return f"{name} ({by}, {count} {unit})"
 
 
 # ─── SHARED WIDGETS ──────────────────────────────────────────────────────────
 
 def pick_runner(df, label, key_prefix):
-    """Search box + (optional) selectbox for picking one runner.
-
-    Returns (runner_df, name, birth_year) or None if nothing chosen yet.
-    """
     search = st.text_input(
-        label, key=f"{key_prefix}_search", placeholder="e.g. Arnar Pétursson"
+        label,
+        key=f"{key_prefix}_search",
+        placeholder=t("search_placeholder"),
     )
     if not search:
         return None
 
     matches = df[df["runner_name"].str.contains(search, case=False, na=False)]
     if matches.empty:
-        st.error(f"No runners found matching '{search}'.")
+        st.error(t("no_matches", search=search))
         return None
 
     runner_groups = (
@@ -115,7 +128,7 @@ def pick_runner(df, label, key_prefix):
 
     if len(runner_groups) > 1:
         selected = st.selectbox(
-            f"Found {len(runner_groups)} matching runners — pick one:",
+            t("pick_one", n=len(runner_groups)),
             runner_groups["label"].tolist(),
             key=f"{key_prefix}_pick",
         )
@@ -137,7 +150,7 @@ def pick_runner(df, label, key_prefix):
     return runner_df, name, birth_year
 
 
-# ─── CHART HELPERS ───────────────────────────────────────────────────────────
+# ─── CHART HELPER ────────────────────────────────────────────────────────────
 
 MMSS_LABEL_FORMAT = (
     "floor(datum.value/60) + ':' + "
@@ -146,35 +159,35 @@ MMSS_LABEL_FORMAT = (
 
 
 def progress_chart(chart_df, color_field=None):
-    """Build an Altair line chart of chiptime over date. Optionally colour
-    by a categorical field (e.g. 'runner_label' for comparison view)."""
     chart_df = chart_df.copy()
     chart_df["time_label"] = chart_df["chiptime_seconds"].apply(format_time)
 
     encodings = dict(
         x=alt.X(
             "race_date_parsed:T",
-            title="Date",
+            title=t("axis_date"),
             axis=alt.Axis(format="%b %Y"),
         ),
         y=alt.Y(
             "chiptime_seconds:Q",
-            title="Chip time",
+            title=t("axis_chiptime"),
             scale=alt.Scale(reverse=True, zero=False),
             axis=alt.Axis(labelExpr=MMSS_LABEL_FORMAT),
         ),
         tooltip=[
-            alt.Tooltip("race_name:N", title="Race"),
-            alt.Tooltip("race_date:N", title="Date"),
-            alt.Tooltip("rank:Q", title="Rank"),
-            alt.Tooltip("time_label:N", title="Chip time"),
+            alt.Tooltip("race_name:N", title=t("tooltip_race")),
+            alt.Tooltip("race_date:N", title=t("tooltip_date")),
+            alt.Tooltip("rank:Q", title=t("tooltip_rank")),
+            alt.Tooltip("time_label:N", title=t("tooltip_chiptime")),
         ],
     )
 
     if color_field:
-        encodings["color"] = alt.Color(f"{color_field}:N", title="Runner")
+        encodings["color"] = alt.Color(
+            f"{color_field}:N", title=t("tooltip_runner")
+        )
         encodings["tooltip"].insert(
-            0, alt.Tooltip(f"{color_field}:N", title="Runner")
+            0, alt.Tooltip(f"{color_field}:N", title=t("tooltip_runner"))
         )
 
     line = (
@@ -185,23 +198,23 @@ def progress_chart(chart_df, color_field=None):
     return line.properties(height=400)
 
 
-# ─── PROFILE VIEW (TAB 1) ────────────────────────────────────────────────────
+# ─── PROFILE VIEW ────────────────────────────────────────────────────────────
 
 def render_profile(runner, name, birth_year):
     st.header(name)
     if pd.notna(birth_year):
-        st.caption(f"Born {int(birth_year)}")
+        st.caption(t("born_caption", year=int(birth_year)))
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total races", len(runner))
-    c2.metric("Years active", runner["race_year"].nunique())
+    c1.metric(t("metric_total_races"), len(runner))
+    c2.metric(t("metric_years_active"), runner["race_year"].nunique())
 
     best_5k = runner.loc[runner["distance_km"] == 5.0, "chiptime_seconds"].min()
     best_10k = runner.loc[runner["distance_km"] == 10.0, "chiptime_seconds"].min()
-    c3.metric("Best 5K", format_time(best_5k))
-    c4.metric("Best 10K", format_time(best_10k))
+    c3.metric(t("metric_best_5k"), format_time(best_5k))
+    c4.metric(t("metric_best_10k"), format_time(best_10k))
 
-    st.subheader("Race history")
+    st.subheader(t("section_race_history"))
     table = runner[[
         "race_date", "race_year", "race_name", "distance_km",
         "rank", "chiptime", "chiptime_seconds", "club"
@@ -215,62 +228,66 @@ def render_profile(runner, name, birth_year):
         "rank", "chiptime", "pace", "club"
     ]]
     display.columns = [
-        "Date", "Year", "Race", "Distance (km)",
-        "Rank", "Chip time", "Pace", "Club",
+        t("col_date"), t("col_year"), t("col_race"), t("col_distance"),
+        t("col_rank"), t("col_chiptime"), t("col_pace"), t("col_club"),
     ]
     st.dataframe(display, hide_index=True, use_container_width=True)
 
-    st.subheader("Progress over time")
+    st.subheader(t("section_progress"))
 
     distances = sorted(runner["distance_km"].dropna().unique())
     if not distances:
-        st.caption("No distance information available for this runner's races.")
+        st.caption(t("no_distance_info"))
         return
 
     if len(distances) > 1:
         chosen = st.selectbox(
-            "Distance:", distances,
+            t("select_distance"), distances,
             format_func=lambda x: f"{x} km",
             key="profile_distance",
         )
     else:
         chosen = distances[0]
-        st.caption(f"Showing {chosen} km races")
+        st.caption(t("showing_distance", distance=chosen))
 
     chart_df = runner[runner["distance_km"] == chosen]
     if chart_df.empty:
-        st.caption("No data for this distance.")
+        st.caption(t("no_data_distance"))
         return
     st.altair_chart(progress_chart(chart_df), use_container_width=True)
 
 
-# ─── COMPARE VIEW (TAB 2) ────────────────────────────────────────────────────
+# ─── COMPARE VIEW ────────────────────────────────────────────────────────────
 
 def render_comparison(r1, name1, by1, r2, name2, by2):
-    label1 = f"{name1}" + (f" (born {int(by1)})" if pd.notna(by1) else "")
-    label2 = f"{name2}" + (f" (born {int(by2)})" if pd.notna(by2) else "")
+    def display_label(name, birth_year):
+        if pd.notna(birth_year):
+            return f"{name} ({t('born_short', year=int(birth_year))})"
+        return name
+
+    label1, label2 = display_label(name1, by1), display_label(name2, by2)
 
     col1, col2 = st.columns(2)
     for col, label, runner in [(col1, label1, r1), (col2, label2, r2)]:
         with col:
             st.subheader(label)
             a, b = st.columns(2)
-            a.metric("Total races", len(runner))
-            b.metric("Years active", runner["race_year"].nunique())
+            a.metric(t("metric_total_races"), len(runner))
+            b.metric(t("metric_years_active"), runner["race_year"].nunique())
             best_5 = runner.loc[runner["distance_km"] == 5.0, "chiptime_seconds"].min()
             best_10 = runner.loc[runner["distance_km"] == 10.0, "chiptime_seconds"].min()
-            a.metric("Best 5K", format_time(best_5))
-            b.metric("Best 10K", format_time(best_10))
+            a.metric(t("metric_best_5k"), format_time(best_5))
+            b.metric(t("metric_best_10k"), format_time(best_10))
 
-    st.subheader("Progress comparison")
+    st.subheader(t("section_compare_progress"))
 
     distances = sorted(set(r1["distance_km"].dropna()) | set(r2["distance_km"].dropna()))
     if not distances:
-        st.caption("No distance data available for comparison.")
+        st.caption(t("no_compare_distance"))
         return
 
     chosen = st.selectbox(
-        "Distance:", distances,
+        t("select_distance"), distances,
         format_func=lambda x: f"{x} km",
         key="compare_distance",
     )
@@ -282,7 +299,7 @@ def render_comparison(r1, name1, by1, r2, name2, by2):
     combined = pd.concat([a, b], ignore_index=True)
 
     if combined.empty:
-        st.caption(f"Neither runner has results at {chosen} km.")
+        st.caption(t("neither_runner_distance", distance=chosen))
         return
 
     st.altair_chart(
@@ -296,44 +313,34 @@ def render_comparison(r1, name1, by1, r2, name2, by2):
 df = load_results(_db_mtime())
 
 if df.empty:
-    st.warning("No data yet. Run `python scraper.py` to populate the database.")
+    st.warning("Engin gögn enn. / No data yet.")
     st.stop()
 
-st.caption(
-    f"Database contains {len(df):,} results across "
-    f"{df['race_name'].nunique()} race events."
-)
+st.caption(t("stats_caption", n_results=len(df), n_races=df["race_name"].nunique()))
 
-with st.expander("ℹ️ About the data"):
-    st.markdown(
-        "All race results are sourced from **[timataka.net](https://timataka.net/)**, "
-        "the timing service used by most Icelandic running events. "
-        "Only races available there appear in this dashboard — if a specific "
-        "race or year is missing upstream, or a page is temporarily broken on "
-        "timataka's side, it won't be here either. "
-        "Results are limited to events that publish a *Heildarúrslit / Overall* "
-        "page; some races only publish gender or age-split categories."
-    )
-profile_tab, compare_tab = st.tabs(["🏃 Runner profile", "⚖️ Compare two runners"])
+with st.expander(t("about_expander")):
+    st.markdown(t("about_text"))
+
+profile_tab, compare_tab = st.tabs([t("tab_profile"), t("tab_compare")])
 
 with profile_tab:
-    result = pick_runner(df, "🔎 Search runner by name", "profile")
+    result = pick_runner(df, t("search_label"), "profile")
     if result is None:
-        st.info("Type a name above to see that runner's history and progress.")
+        st.info(t("search_prompt"))
     else:
         runner_df, name, birth_year = result
         render_profile(runner_df, name, birth_year)
 
 with compare_tab:
-    st.write("Search for two runners to put their stats and progression side by side.")
+    st.write(t("compare_intro"))
     col1, col2 = st.columns(2)
     with col1:
-        result1 = pick_runner(df, "Runner 1", "compare1")
+        result1 = pick_runner(df, t("runner_1"), "compare1")
     with col2:
-        result2 = pick_runner(df, "Runner 2", "compare2")
+        result2 = pick_runner(df, t("runner_2"), "compare2")
 
     if result1 is None or result2 is None:
-        st.info("Pick two runners above to compare them.")
+        st.info(t("pick_two_runners"))
     else:
         df1, name1, by1 = result1
         df2, name2, by2 = result2
