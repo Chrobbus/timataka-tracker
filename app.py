@@ -223,15 +223,36 @@ def render_profile(runner, name, birth_year):
         lambda r: format_pace(r["chiptime_seconds"], r["distance_km"]),
         axis=1,
     )
+
+    # Identify the PB row at each distance — the row index with the
+    # smallest chiptime_seconds. We use a set of indices for a fast lookup.
+    pb_indices = set()
+    for dist, group in table.dropna(subset=["distance_km"]).groupby("distance_km"):
+        times = group["chiptime_seconds"].dropna()
+        if not times.empty:
+            pb_indices.add(times.idxmin())
+    table["pb_mark"] = table.index.map(lambda i: "🏆" if i in pb_indices else "")
+
     display = table[[
         "race_date", "race_year", "race_name", "distance_km",
-        "rank", "chiptime", "pace", "club"
-    ]]
+        "rank", "chiptime", "pace", "club", "pb_mark"
+    ]].copy()
+    pb_col_name = t("col_pb")
     display.columns = [
         t("col_date"), t("col_year"), t("col_race"), t("col_distance"),
         t("col_rank"), t("col_chiptime"), t("col_pace"), t("col_club"),
+        pb_col_name,
     ]
-    st.dataframe(display, hide_index=True, use_container_width=True)
+
+    def style_pb_rows(row):
+        if row[pb_col_name]:
+            return ["font-weight: 600; color: #FF6B35"] * len(row)
+        return [""] * len(row)
+
+    styled = display.style.apply(style_pb_rows, axis=1).format({
+        t("col_distance"): "{:g}",
+    })
+    st.dataframe(styled, hide_index=True, use_container_width=True)
 
     st.subheader(t("section_progress"))
 

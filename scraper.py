@@ -29,6 +29,7 @@ COLUMN_NAME_MAP = {
 
 DISTANCE_OVERRIDES = {
     "hlaupaseriafh": 5.0,
+    "vetrarhlaup": 10.0,
 }
 
 NAMED_DISTANCE_PATTERNS = [

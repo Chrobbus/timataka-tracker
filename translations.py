@@ -63,6 +63,7 @@ TRANSLATIONS = {
         "col_chiptime": "Flögutími",
         "col_pace": "Hraði",
         "col_club": "Félag",
+	"col_pb": "🏆 PB",
         "section_progress": "Framvinda yfir tíma",
         "select_distance": "Vegalengd:",
         "no_distance_info": (
@@ -152,6 +153,7 @@ TRANSLATIONS = {
         "col_chiptime": "Chip time",
         "col_pace": "Pace",
         "col_club": "Club",
+	"col_pb": "🏆 PB",
         "section_progress": "Progress over time",
         "select_distance": "Distance:",
         "no_distance_info": (
