@@ -228,13 +228,19 @@ def render_stats_card(runner, name, birth_year):
     for dist, label in distance_labels:
         d_races = runner[runner["distance_km"] == dist]
         if d_races.empty or d_races["chiptime_seconds"].dropna().empty:
-            pb_rows.append(
-                f'<div class="tt-pb-row">'
-                f'<div class="tt-pb-distance">{label}</div>'
-                f'<div class="tt-pb-time">—</div>'
-                f'<div class="tt-pb-none">{t("pb_no_data")}</div>'
-                f'</div>'
-            )
+            continue
+        pb_idx = d_races["chiptime_seconds"].idxmin()
+        pb_row = d_races.loc[pb_idx]
+        pb_time = format_time(pb_row["chiptime_seconds"])
+        race_name = pb_row["race_name"]
+        year = int(pb_row["race_year"]) if pd.notna(pb_row["race_year"]) else ""
+        pb_rows.append(
+            f'<div class="tt-pb-row">'
+            f'<div class="tt-pb-distance">{label}</div>'
+            f'<div class="tt-pb-time">{pb_time}</div>'
+            f'<div class="tt-pb-detail">{race_name} · {year}</div>'
+            f'</div>'
+        )
         else:
             pb_idx = d_races["chiptime_seconds"].idxmin()
             pb_row = d_races.loc[pb_idx]
@@ -263,13 +269,17 @@ def render_stats_card(runner, name, birth_year):
         f'<div class="tt-stat"><div class="tt-stat-value">{years_active}</div><div class="tt-stat-label">{t("metric_years_active")}</div></div>',
         f'<div class="tt-stat"><div class="tt-stat-value">{fastest_pace}</div><div class="tt-stat-label">{t("metric_fastest_pace")}</div></div>',
         '</div>',
-        '<div class="tt-pbs">',
-        f'<div class="tt-pbs-title">{t("section_personal_bests")}</div>',
-        "".join(pb_rows),
-        '</div>',
         '<div class="tt-footer">timataka-tracker.streamlit.app</div>',
         '</div>',
     ]
+    if pb_rows:
+        html_parts.insert(
+            -2,  # before the footer and the closing card div
+            '<div class="tt-pbs">'
+            + f'<div class="tt-pbs-title">{t("section_personal_bests")}</div>'
+            + "".join(pb_rows)
+            + '</div>'
+        )
     html = "".join(html_parts)
 
     st.markdown(html, unsafe_allow_html=True)

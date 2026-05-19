@@ -54,6 +54,17 @@ def fetch_page(url):
     response.raise_for_status()
     return response.text
 
+def normalize_distance(dist):
+    """Round common race distances to their standard values.
+    Half marathon (officially 21.0975) and full marathon (42.195) are
+    often labelled as 21 km or 42 km on timataka pages."""
+    if dist is None:
+        return None
+    if 20.5 <= dist <= 21.5:
+        return 21.1
+    if 41.5 <= dist <= 42.5:
+        return 42.2
+    return dist
 
 def extract_distance(soup):
     for tag in soup.find_all(["h1", "h2", "h3", "h4"]):
@@ -100,7 +111,7 @@ def extract_metadata(soup, url):
             if slug_fragment in url.lower():
                 distance_km = override
                 break
-
+    distance_km = normalize_distance(distance_km)
     return {"name": name, "year": year, "distance_km": distance_km, "url": url}
 
 

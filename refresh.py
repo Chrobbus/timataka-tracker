@@ -12,6 +12,24 @@ from scraper import (
 )
 from discovery import discover_all_result_urls
 
+def normalize_existing_distances():
+    """Snap any half/full marathon distances that crept in as 21.0 or 42.0
+    to their official rounded values."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE races SET distance_km = 21.1 "
+        "WHERE distance_km BETWEEN 20.5 AND 21.5 AND distance_km != 21.1"
+    )
+    half = cur.rowcount
+    cur.execute(
+        "UPDATE races SET distance_km = 42.2 "
+        "WHERE distance_km BETWEEN 41.5 AND 42.5 AND distance_km != 42.2"
+    )
+    full = cur.rowcount
+    conn.commit()
+    conn.close()
+    return half, full
 
 def apply_distance_overrides():
     conn = get_connection()
@@ -74,7 +92,8 @@ def delete_race(race_id):
 
 def main():
     init_db()
-
+    half, full = normalize_existing_distances()
+    print(f"Normalised distances: {half} half-marathon, {full} marathon races.\n")
     updated = apply_distance_overrides()
     print(f"Distance overrides applied: {updated} race(s) updated.\n")
 
