@@ -241,19 +241,6 @@ def render_stats_card(runner, name, birth_year):
             f'<div class="tt-pb-detail">{race_name} · {year}</div>'
             f'</div>'
         )
-        else:
-            pb_idx = d_races["chiptime_seconds"].idxmin()
-            pb_row = d_races.loc[pb_idx]
-            pb_time = format_time(pb_row["chiptime_seconds"])
-            race_name = pb_row["race_name"]
-            year = int(pb_row["race_year"]) if pd.notna(pb_row["race_year"]) else ""
-            pb_rows.append(
-                f'<div class="tt-pb-row">'
-                f'<div class="tt-pb-distance">{label}</div>'
-                f'<div class="tt-pb-time">{pb_time}</div>'
-                f'<div class="tt-pb-detail">{race_name} · {year}</div>'
-                f'</div>'
-            )
 
     birth_str = t("born_short", year=int(birth_year)) if pd.notna(birth_year) else ""
 
@@ -274,7 +261,7 @@ def render_stats_card(runner, name, birth_year):
     ]
     if pb_rows:
         html_parts.insert(
-            -2,  # before the footer and the closing card div
+            -2,
             '<div class="tt-pbs">'
             + f'<div class="tt-pbs-title">{t("section_personal_bests")}</div>'
             + "".join(pb_rows)
