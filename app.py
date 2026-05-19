@@ -87,6 +87,192 @@ def format_pace(seconds, distance_km):
     s = int(pace_seconds % 60)
     return f"{m}:{s:02d}/km"
 
+def format_pace_seconds(pace_sec):
+    """Format a pace in seconds-per-km as M:SS/km."""
+    if pd.isna(pace_sec):
+        return "—"
+    m = int(pace_sec // 60)
+    s = int(pace_sec % 60)
+    return f"{m}:{s:02d}/km"
+
+
+STATS_CARD_CSS = """
+<style>
+.tt-stats-card {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid rgba(255, 107, 53, 0.4);
+    border-radius: 16px;
+    padding: 28px;
+    margin: 16px 0 24px 0;
+    color: #f5f5f5;
+}
+.tt-brand {
+    font-size: 11px;
+    color: #FF6B35;
+    letter-spacing: 3px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.tt-name {
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+.tt-birth {
+    font-size: 13px;
+    color: #aaa;
+    margin: 4px 0 20px 0;
+}
+.tt-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.tt-stat {
+    background: rgba(255, 107, 53, 0.08);
+    border: 1px solid rgba(255, 107, 53, 0.2);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+}
+.tt-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #FF6B35;
+    font-variant-numeric: tabular-nums;
+}
+.tt-stat-label {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.tt-pbs {
+    border-top: 1px solid rgba(255, 107, 53, 0.2);
+    padding-top: 16px;
+}
+.tt-pbs-title {
+    font-size: 11px;
+    color: #FF6B35;
+    letter-spacing: 3px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+}
+.tt-pb-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 14px;
+}
+.tt-pb-row:last-child {
+    border-bottom: none;
+}
+.tt-pb-distance {
+    font-weight: 600;
+    color: #fff;
+    width: 70px;
+}
+.tt-pb-time {
+    font-weight: 700;
+    color: #FF6B35;
+    width: 90px;
+    font-variant-numeric: tabular-nums;
+}
+.tt-pb-detail {
+    color: #aaa;
+    font-size: 13px;
+    text-align: right;
+    flex: 1;
+}
+.tt-pb-none {
+    color: #555;
+    text-align: right;
+    flex: 1;
+    font-size: 13px;
+    font-style: italic;
+}
+.tt-footer {
+    text-align: center;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 11px;
+    color: #777;
+    letter-spacing: 1px;
+}
+</style>
+"""
+
+
+def render_stats_card(runner, name, birth_year):
+    """Render a shareable Tölfræði stats card."""
+    total_races = len(runner)
+    total_km = runner["distance_km"].sum()
+    years_active = runner["race_year"].nunique()
+
+    pace_eligible = runner.dropna(subset=["chiptime_seconds", "distance_km"])
+    pace_eligible = pace_eligible[pace_eligible["distance_km"] > 0]
+    if not pace_eligible.empty:
+        pace_per_km = pace_eligible["chiptime_seconds"] / pace_eligible["distance_km"]
+        fastest_pace = format_pace_seconds(pace_per_km.min())
+    else:
+        fastest_pace = "—"
+
+    distance_labels = [(5.0, "5K"), (10.0, "10K"), (21.1, "21.1K"), (42.2, "42.2K")]
+    pb_rows = []
+    for dist, label in distance_labels:
+        d_races = runner[runner["distance_km"] == dist]
+        if d_races.empty or d_races["chiptime_seconds"].dropna().empty:
+            pb_rows.append(
+                f'<div class="tt-pb-row">'
+                f'<div class="tt-pb-distance">{label}</div>'
+                f'<div class="tt-pb-time">—</div>'
+                f'<div class="tt-pb-none">{t("pb_no_data")}</div>'
+                f'</div>'
+            )
+        else:
+            pb_idx = d_races["chiptime_seconds"].idxmin()
+            pb_row = d_races.loc[pb_idx]
+            pb_time = format_time(pb_row["chiptime_seconds"])
+            race_name = pb_row["race_name"]
+            year = int(pb_row["race_year"]) if pd.notna(pb_row["race_year"]) else ""
+            pb_rows.append(
+                f'<div class="tt-pb-row">'
+                f'<div class="tt-pb-distance">{label}</div>'
+                f'<div class="tt-pb-time">{pb_time}</div>'
+                f'<div class="tt-pb-detail">{race_name} · {year}</div>'
+                f'</div>'
+            )
+
+    birth_str = t("born_short", year=int(birth_year)) if pd.notna(birth_year) else ""
+
+    html_parts = [
+        STATS_CARD_CSS,
+        '<div class="tt-stats-card">',
+        f'<div class="tt-brand">{t("stats_card_brand")}</div>',
+        f'<div class="tt-name">{name}</div>',
+        f'<div class="tt-birth">{birth_str}</div>',
+        '<div class="tt-stats-row">',
+        f'<div class="tt-stat"><div class="tt-stat-value">{total_races}</div><div class="tt-stat-label">{t("metric_total_races")}</div></div>',
+        f'<div class="tt-stat"><div class="tt-stat-value">{total_km:.0f} km</div><div class="tt-stat-label">{t("metric_total_distance")}</div></div>',
+        f'<div class="tt-stat"><div class="tt-stat-value">{years_active}</div><div class="tt-stat-label">{t("metric_years_active")}</div></div>',
+        f'<div class="tt-stat"><div class="tt-stat-value">{fastest_pace}</div><div class="tt-stat-label">{t("metric_fastest_pace")}</div></div>',
+        '</div>',
+        '<div class="tt-pbs">',
+        f'<div class="tt-pbs-title">{t("section_personal_bests")}</div>',
+        "".join(pb_rows),
+        '</div>',
+        '<div class="tt-footer">timataka-tracker.streamlit.app</div>',
+        '</div>',
+    ]
+    html = "".join(html_parts)
+
+    st.markdown(html, unsafe_allow_html=True)
 
 def runner_display_label(name, birth_year, count):
     if pd.notna(birth_year):
@@ -201,18 +387,7 @@ def progress_chart(chart_df, color_field=None):
 # ─── PROFILE VIEW ────────────────────────────────────────────────────────────
 
 def render_profile(runner, name, birth_year):
-    st.header(name)
-    if pd.notna(birth_year):
-        st.caption(t("born_caption", year=int(birth_year)))
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric(t("metric_total_races"), len(runner))
-    c2.metric(t("metric_years_active"), runner["race_year"].nunique())
-
-    best_5k = runner.loc[runner["distance_km"] == 5.0, "chiptime_seconds"].min()
-    best_10k = runner.loc[runner["distance_km"] == 10.0, "chiptime_seconds"].min()
-    c3.metric(t("metric_best_5k"), format_time(best_5k))
-    c4.metric(t("metric_best_10k"), format_time(best_10k))
+    render_stats_card(runner, name, birth_year)
 
     st.subheader(t("section_race_history"))
     table = runner[[

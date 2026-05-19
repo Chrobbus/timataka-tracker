@@ -25,7 +25,7 @@ TRANSLATIONS = {
             "**[timataka.net](https://timataka.net/)**, "
             "tímatökuþjónustunni sem flest hlaup á Íslandi nota. "
             "Aðeins hlaup sem birtast þar koma fram hér — ef tiltekið "
-            "hlaup eða ár vantar þar, eða ef síða er tímabundið bilað, "
+            "hlaup eða ár vantar þar, eða ef síða er tímabundið biluð, "
             "þá vantar það líka hér. Niðurstöður takmarkast við "
             "viðburði sem birta *Heildarúrslit / Overall* síðu; sum "
             "hlaup birta aðeins skiptingu eftir kyni eða aldri."
@@ -54,6 +54,11 @@ TRANSLATIONS = {
         "metric_years_active": "Árafjöldi hlaupa",
         "metric_best_5k": "5K PB",
         "metric_best_10k": "10K PB",
+	"metric_total_distance": "Vegalengd samtals",
+        "metric_fastest_pace": "Mesti hraði",
+        "section_personal_bests": "Persónuleg met",
+        "stats_card_brand": "TÍMATAKA RACE TRACKER",
+        "pb_no_data": "engin gögn",
         "section_race_history": "Hlaupasaga",
         "col_date": "Dagsetning",
         "col_year": "Ár",
@@ -142,8 +147,13 @@ TRANSLATIONS = {
         "born_caption": "Born {year}",
         "metric_total_races": "Total races",
         "metric_years_active": "Years active",
-        "metric_best_5k": "Best 5K",
-        "metric_best_10k": "Best 10K",
+        "metric_best_5k": "5K PB",
+        "metric_best_10k": "10K PB",
+	"metric_total_distance": "Total distance",
+        "metric_fastest_pace": "Fastest pace",
+        "section_personal_bests": "Personal bests",
+        "stats_card_brand": "TÍMATAKA RACE TRACKER",
+        "pb_no_data": "no data",
         "section_race_history": "Race history",
         "col_date": "Date",
         "col_year": "Year",
