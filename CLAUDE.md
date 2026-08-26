@@ -49,6 +49,7 @@ Dependencies (`requirements.txt`): `streamlit`, `pandas`, `beautifulsoup4`,
 | `scraper.py` | Fetches and parses a timataka result page. Holds `COLUMN_NAME_MAP`, `DISTANCE_OVERRIDES`, `normalize_distance()`. `python scraper.py` = discover + scrape everything new. |
 | `discovery.py` | Crawls the timataka index page to find running-event result URLs and the race date next to each one. Filters sport by slug keywords. |
 | `refresh.py` | Maintenance pass: normalize distances, apply overrides, backfill dates, then find and re-scrape races the parser got wrong. |
+| `corsa.py` | Scraper for results.corsa.is — Reykjavíkurmaraþon 2024 onwards. `python corsa.py --list` shows what's available without saving. |
 | `scrape_one.py` | `python scrape_one.py <url>` — scrape one race, auto-looking up its date from the event page. |
 | `audit.py` | `python audit.py <url>` — prints exactly what the parser sees on a page (headers, raw→normalized column names, first parsed rows). First stop when a race imports wrong. |
 | `check.py` | Tiny ad-hoc query: how many runners in each race have a birth year. Edit `URL_FRAGMENT` at the top. |
@@ -100,12 +101,61 @@ expect large diffs.
 `cat=overall`. Races that publish only gender/age splits won't appear.
 `load_results()` also filters to rows where `chiptime_seconds IS NOT NULL`.
 
+## Multiple sources
+
+`races.source` records which site a race came from (`timataka` or `corsa`).
+`results.gender` is populated only by sources that publish it — timataka's
+overall tables never do, so it's null for the great majority of rows.
+
+**Reykjavíkurmaraþon is split across sites by year.** timataka has 2018, 2019,
+2022 and 2023; corsa has 2023 through 2026. 2023 exists on *both*, which is
+why `database.find_race_by_identity()` exists: before saving, a scraper checks
+whether the same (name, year, distance) is already stored **from a different
+source** and skips it. The "different source" part matters — corsa splits one
+distance into separate "Competition" and "General registration" result sets,
+and both are wanted, so same-source matches must not be treated as duplicates.
+
+`corsa.py` uses the name `Reykjavíkurmaraþon Íslandsbanka` deliberately: it's
+what timataka called the event in 2019–2023, so a runner's history stays
+continuous across the source change.
+
+**corsa renders results client-side, but you don't need a browser.** The React
+app builds its table in JavaScript, so there's no HTML table to parse — but
+the full participant list is embedded as JSON in the server-rendered payload,
+which plain `requests` can fetch. Two things to know:
+
+* The data is only on the `/overall` sub-route. The bare result URL renders
+  just the category navigation.
+* Fetch it with `corsa.fetch()`, which undoes the payload's backslash-escaping,
+  and pull the array with `extract_json_array()`. Don't use a regex to grab
+  participant objects — they don't all carry the same fields, so a pattern
+  anchored on the last field runs past one object into the next.
+
+**Deciding who actually finished (corsa).** `chipTime` is an array of timing
+points, `[start crossing, split, ..., finish]`, in milliseconds. Reading
+`chipTime[-1]` naively invents finish times for people who stopped partway —
+it produced a 13-second 10 km and a 25-minute one. Three conditions, all
+needed, and all learned by finding bad data:
+
+1. The array must be the full length for that race (taken as the most common
+   length in the result set, since the number of mats isn't published).
+2. The last entry must be non-null — a missed mat appears as `null` *inside*
+   the array, and `None > 0` raises `TypeError`.
+3. If the result set ranks anyone, the runner must have a rank. The fun run
+   ranks nobody, so that rule can't apply there — a few implausible fun-run
+   times survive as a result.
+
+Runners who opt out of public listing appear with a null name and birth year
+0, and are skipped.
+
 ## Standard workflow
 
 ```powershell
 .\venv\Scripts\activate
 
-python scraper.py            # discover + scrape any new races
+python scraper.py            # discover + scrape any new races (timataka)
+python corsa.py              # Reykjavíkurmaraþon 2024+ (corsa)
+python corsa.py --list       # ...show what's there without saving
 python refresh.py            # re-scrape races the parser got wrong
 python scrape_one.py <url>   # add one specific race
 python audit.py <url>        # debug what the parser sees on a page
@@ -122,7 +172,24 @@ straight to the live site.
 
 ## Ideas on the horizon
 
-Done: PB highlighting, the Tölfræði stats card, Icelandic/English toggle.
+Done: PB highlighting, the Tölfræði stats card, Icelandic/English toggle,
+multi-source scraping (corsa alongside timataka).
+
+Now possible because corsa supplies gender for ~40,000 results:
+gender splits on percentiles and records, and age-group comparisons.
+
+Known gaps worth picking up:
+
+- **Reykjavíkurmaraþon 2013–2017** exists only as PDFs on
+  `marathon.cdn.prismic.io`. `urslit.marathon.is` looks like a results site
+  but is a frozen mirror of **2023** — don't scrape it, it duplicates data
+  timataka already has.
+- **124 races have no distance** (~16,400 results invisible to every
+  distance-based feature). Roughly 12 recurring events cover most of them, but
+  8 are multi-distance, so `DISTANCE_OVERRIDES` (slug → one distance) can't
+  express them as it stands. Backyard ultras genuinely have no fixed distance.
+- **Club data is only 38% filled**, and inconsistently spelled — a club
+  leaderboard would rank clubs by who bothered to enter a club name.
 
 Candidates next:
 

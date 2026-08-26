@@ -173,6 +173,33 @@ def find_runner(name_query):
     return rows
 
 
+def find_race_by_identity(name, year, distance_km, other_than_source):
+    """Find the same event/year/distance already stored from a *different* site.
+
+    A URL is unique per source, so the same physical race scraped from two
+    sites would otherwise be saved twice and every runner counted twice —
+    Reykjavíkurmaraþon 2023 is published on both timataka and corsa.
+
+    The comparison deliberately ignores races from the same source, because
+    one site can legitimately split a single distance into several result
+    sets: corsa publishes separate "Competition" and "General registration"
+    tables for the same race, and both are wanted.
+
+    Returns (id, url, source) of the existing race, or None.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, url, source FROM races
+         WHERE name = ? AND year IS ? AND distance_km IS ?
+           AND COALESCE(source, 'timataka') != ?
+         LIMIT 1
+    """, (name, year, distance_km, other_than_source))
+    row = cur.fetchone()
+    conn.close()
+    return row
+
+
 def is_url_scraped(url):
     conn = get_connection()
     cur = conn.cursor()
