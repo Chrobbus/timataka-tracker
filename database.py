@@ -1,9 +1,25 @@
 """Database setup and operations for the Tímataka race tracker."""
 
+import re
 import sqlite3
 from datetime import datetime
 
 DB_PATH = "race_results.db"
+
+
+def normalize_name(name):
+    """Collapse runs of whitespace inside a runner's name.
+
+    timataka publishes names with stray double spaces ('Rúnar  Sigurðsson'),
+    and the same person is often entered both ways across races. Since the
+    dashboard identifies a runner by the exact (name, birth_year) pair, an
+    extra space silently splits one person's history into two — this was
+    affecting roughly 4,700 runners. Normalising on the way in keeps them
+    together, and refresh.normalize_existing_names() fixes older rows.
+    """
+    if not name:
+        return name
+    return re.sub(r"\s+", " ", name).strip()
 
 
 def get_connection():
@@ -32,6 +48,12 @@ def init_db():
     if "race_date" not in columns:
         cur.execute("ALTER TABLE races ADD COLUMN race_date TEXT")
 
+    # Migration: tag every race with the site it was scraped from. Everything
+    # already in the database predates multi-source support, so it's timataka.
+    if "source" not in columns:
+        cur.execute("ALTER TABLE races ADD COLUMN source TEXT")
+        cur.execute("UPDATE races SET source = 'timataka' WHERE source IS NULL")
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS results (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,6 +68,14 @@ def init_db():
             FOREIGN KEY (race_id) REFERENCES races(id)
         )
     """)
+
+    # Migration: gender. timataka's overall tables never expose it, but other
+    # Icelandic results sites publish a Kyn column, so it stays optional and
+    # is populated only by sources that provide it.
+    cur.execute("PRAGMA table_info(results)")
+    result_columns = [row[1] for row in cur.fetchall()]
+    if "gender" not in result_columns:
+        cur.execute("ALTER TABLE results ADD COLUMN gender TEXT")
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_results_name ON results(name)")
 
@@ -81,19 +111,22 @@ def save_race(metadata, runners):
         cur.execute("""
             UPDATE races
                SET name = ?, year = ?, distance_km = ?,
-                   race_date = ?, scraped_at = ?
+                   race_date = ?, source = ?, scraped_at = ?
              WHERE id = ?
         """, (
             metadata["name"], metadata["year"], metadata["distance_km"],
-            metadata.get("race_date"), now, race_id,
+            metadata.get("race_date"), metadata.get("source", "timataka"),
+            now, race_id,
         ))
     else:
         cur.execute("""
-            INSERT INTO races (name, year, distance_km, race_date, url, scraped_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO races
+              (name, year, distance_km, race_date, source, url, scraped_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             metadata["name"], metadata["year"], metadata["distance_km"],
-            metadata.get("race_date"), metadata["url"], now,
+            metadata.get("race_date"), metadata.get("source", "timataka"),
+            metadata["url"], now,
         ))
         race_id = cur.lastrowid
 
@@ -105,17 +138,18 @@ def save_race(metadata, runners):
         cur.execute("""
             INSERT INTO results
               (race_id, rank, bib, name, birth_year, club,
-               chiptime, chiptime_seconds)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               chiptime, chiptime_seconds, gender)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             race_id,
             int(rank) if rank.isdigit() else None,
             r.get("bib", "") or None,
-            r.get("name", ""),
+            normalize_name(r.get("name", "")),
             int(birth_year) if birth_year.isdigit() else None,
             r.get("club", "") or None,
             chiptime,
             time_to_seconds(chiptime),
+            (r.get("gender", "") or "").strip().upper() or None,
         ))
 
     conn.commit()

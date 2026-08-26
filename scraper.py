@@ -25,7 +25,20 @@ COLUMN_NAME_MAP = {
     "flögutími": "chiptime", "nettótími": "chiptime",
     "vegalengd": "distance",                       # for timed events (km covered)
     "hringir": "laps", "hringur": "laps",
+    "kyn": "gender", "gender": "gender", "sex": "gender",
 }
+
+# Some headers can't be exact-matched because the text varies from race to
+# race — marathon.is labels its split-times column with whichever splits that
+# distance had, e.g. "Millit. (5k)" vs "Millit. (5k, 10k, 16k, 21.1k, 30k)".
+COLUMN_NAME_PATTERNS = [
+    # "Tími (Flögutími)" packs gun time and chip time into a single cell.
+    (re.compile(r"^t[íi]mi\s*\(fl[öo]gut[íi]mi\)$"), "time_and_chiptime"),
+    (re.compile(r"^millit\.?\b"), "splits"),
+]
+
+# Matches "00:22:06 (00:20:46)" -> gun time, chip time.
+COMBINED_TIME_RE = re.compile(r"^\s*([\d:]+)\s*\(\s*([\d:]+)\s*\)\s*$")
 
 DISTANCE_OVERRIDES = {
     "hlaupaseriafh": 5.0,
@@ -46,7 +59,12 @@ def normalize_column_name(raw):
     name = raw.strip().lower()
     if name == "#":
         return "rank"
-    return COLUMN_NAME_MAP.get(name, name)
+    if name in COLUMN_NAME_MAP:
+        return COLUMN_NAME_MAP[name]
+    for pattern, mapped in COLUMN_NAME_PATTERNS:
+        if pattern.match(name):
+            return mapped
+    return name
 
 
 def fetch_page(url):
@@ -112,7 +130,10 @@ def extract_metadata(soup, url):
                 distance_km = override
                 break
     distance_km = normalize_distance(distance_km)
-    return {"name": name, "year": year, "distance_km": distance_km, "url": url}
+    return {
+        "name": name, "year": year, "distance_km": distance_km,
+        "url": url, "source": "timataka",
+    }
 
 
 def parse_results(soup):
@@ -136,6 +157,18 @@ def parse_results(soup):
             if col_name:
                 runner[col_name] = cell.get_text(strip=True)
 
+        # A "Tími (Flögutími)" cell holds both times at once. Split it into the
+        # separate keys save_race() already understands; if it doesn't match the
+        # expected shape, treat the whole cell as the finish time.
+        combined = runner.pop("time_and_chiptime", None)
+        if combined:
+            match = COMBINED_TIME_RE.match(combined)
+            if match:
+                runner.setdefault("time", match.group(1))
+                runner.setdefault("chiptime", match.group(2))
+            else:
+                runner.setdefault("time", combined)
+
         # Fallback: if the rank column wasn't recognised but we have a name,
         # use the row's position so we don't lose the runner entirely.
         if not runner.get("rank") and runner.get("name"):
@@ -149,6 +182,13 @@ def parse_results(soup):
 
 
 def scrape_and_save(url, race_date=None):
+    """Scrape one result page and save it. Returns True if anything was saved.
+
+    Some old timataka URLs stop serving their race page and start returning
+    the site's generic landing page instead, which parses to zero runners.
+    Saving that would wipe out results we already have, so an empty parse is
+    always treated as a failure and never written to the database.
+    """
     html = fetch_page(url)
     soup = BeautifulSoup(html, "html.parser")
     metadata = extract_metadata(soup, url)
@@ -159,7 +199,12 @@ def scrape_and_save(url, race_date=None):
           f"({metadata['distance_km']} km)"
           f"{' on ' + race_date if race_date else ''}, "
           f"{len(runners)} runners")
+    if not runners:
+        print("     ! page returned no runners — not saving "
+              "(the race page has probably been taken down)")
+        return False
     save_race(metadata, runners)
+    return True
 
 
 def update_existing_dates(url_dates):

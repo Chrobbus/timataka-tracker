@@ -3,7 +3,7 @@ and backfill dates from discovery."""
 
 import time
 
-from database import init_db, get_connection
+from database import init_db, get_connection, normalize_name
 from scraper import (
     scrape_and_save,
     update_existing_dates,
@@ -30,6 +30,28 @@ def normalize_existing_distances():
     conn.commit()
     conn.close()
     return half, full
+
+def normalize_existing_names():
+    """Collapse double spaces in names already stored in the database.
+
+    SQLite has no regular-expression replace, so we pull the distinct names
+    out, fix the ones that need it in Python, and write those back. Only a
+    few thousand distinct names actually change, so this stays quick.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT name FROM results")
+    changes = [
+        (normalize_name(name), name)
+        for (name,) in cur.fetchall()
+        if name and normalize_name(name) != name
+    ]
+    cur.executemany("UPDATE results SET name = ? WHERE name = ?", changes)
+    affected = cur.rowcount
+    conn.commit()
+    conn.close()
+    return len(changes), affected
+
 
 def apply_distance_overrides():
     conn = get_connection()
@@ -94,6 +116,8 @@ def main():
     init_db()
     half, full = normalize_existing_distances()
     print(f"Normalised distances: {half} half-marathon, {full} marathon races.\n")
+    names, rows = normalize_existing_names()
+    print(f"Normalised whitespace in {names} runner names.\n")
     updated = apply_distance_overrides()
     print(f"Distance overrides applied: {updated} race(s) updated.\n")
 
@@ -112,6 +136,7 @@ def main():
         return
 
     fixed = 0
+    skipped = 0
     for race_id, url, name, year, distance, runners, with_bday, with_chiptime in problems:
         reasons = []
         if year is None:
@@ -126,16 +151,23 @@ def main():
             reasons.append("no chiptimes")
         print(f"  [{race_id}] {name} ({', '.join(reasons)})")
 
-        delete_race(race_id)
+        # Don't delete first. save_race() already clears a race's old results
+        # when it updates one in place, and deleting up front meant a race
+        # whose page had been taken down lost the results we already had.
         race_date = discovered.get(url)
         try:
-            scrape_and_save(url, race_date=race_date)
-            fixed += 1
+            if scrape_and_save(url, race_date=race_date):
+                fixed += 1
+            else:
+                skipped += 1
         except Exception as e:
             print(f"  ! failed: {e}")
         time.sleep(REQUEST_DELAY)
 
     print(f"\nDone. {fixed} of {len(problems)} successfully re-scraped.")
+    if skipped:
+        print(f"{skipped} left untouched because their page no longer "
+              f"returns results (existing data kept).")
 
 
 if __name__ == "__main__":
